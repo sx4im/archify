@@ -75,6 +75,9 @@ test('default-root behavior is documented for both published releases', () => {
   assert.ok(section, 'document the provider root behavior for the published releases');
   assert.match(section, /Published \*\*1\.1\.0\*\* sets `includeDefaultRoots: true`/);
   assert.match(section, /Published \*\*1\.0\.0\*\* set `includeDefaultRoots: false`/);
+  assert.match(section, /`includeDefaultRoots` is a `!!js` expression/);
+  assert.match(section, /#1336/);
+  assert.match(section, /no shadowing warnings/);
   assert.match(section, /macOS Desktop `0\.2\.0-rc\.2`/);
   assert.match(section, /verification remains pending/);
 });

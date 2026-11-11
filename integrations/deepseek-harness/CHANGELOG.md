@@ -2,6 +2,10 @@
 
 For current publication status, see the [repository integration README](https://github.com/tt-a1i/archify/tree/main/integrations/deepseek-harness).
 
+## Unreleased
+
+- Decides `includeDefaultRoots` at activation instead of fixing it to `true`: the provider includes the host's default Skill roots only when the host's own `skill-filesystem` row is absent or disabled ([#1336](https://github.com/tt-a1i/archify/issues/1336)). Base-backed profiles no longer log a shadowing warning per Skill or watch the same roots twice; isolated profiles still get the defaults from this provider alone. The acceptance probe now records host warnings and requires none in the base-live composition.
+
 ## 1.1.0 — 2026-11-08
 
 - Publishes the independent DSH sync requested in [#1153](https://github.com/tt-a1i/archify/issues/1153): Archify 3.2.0 pinned to `edf158c4e7a1d18d20cc329840f864289634c090`, including the post-tag Apache-2.0 and third-party notice fixes. Adapter MIT licensing remains distinct from the bundled Skill's licensing.

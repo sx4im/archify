@@ -48,7 +48,29 @@ export async function apply(ctx) {
   const out = process.env.ARCHIFY_DSH_PROBE_OUT;
   if (!out) throw new Error('ARCHIFY_DSH_PROBE_OUT is required for the test-only skill probe');
   const expectedNames = JSON.parse(process.env.ARCHIFY_DSH_PROBE_SKILLS || '["archify"]');
-  const result = await probeSkills(ctx.skills, process.env.ARCHIFY_DSH_PROBE_CWD || process.cwd(), expectedNames);
+  const cwd = process.env.ARCHIFY_DSH_PROBE_CWD || process.cwd();
+  // Capture host warnings while listing: a provider scanning roots another
+  // live provider already covers logs one shadowing warning per Skill on
+  // every uncached catalog read (#1336). The registry still de-duplicates
+  // the catalog, so the skill list alone cannot show the duplicate scan.
+  const warnings = [];
+  let warningsCaptured = false;
+  if (typeof ctx.logger?.exporter === 'function') {
+    warningsCaptured = true;
+    ctx.logger.exporter({ colors: 0, export: (message) => {
+      if (message?.type === 'warn') warnings.push(String(message.args?.[0] ?? message));
+    } });
+  }
+  const result = await probeSkills(ctx.skills, cwd, expectedNames);
+  // A watcher event has the same effect as an invalidation, so list once
+  // more on a fresh catalog instead of letting the first read's cache hide
+  // a duplicate scan.
+  if (typeof ctx.skills.invalidateCache === 'function') {
+    ctx.skills.invalidateCache();
+    await ctx.skills.list({ cwd });
+  }
+  result.warnings = warnings;
+  result.warningsCaptured = warningsCaptured;
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`);
   const exit = ctx.cmdlineArgs?.exit || ctx.appExit;

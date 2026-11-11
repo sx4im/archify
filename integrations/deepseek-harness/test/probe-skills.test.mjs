@@ -76,3 +76,72 @@ test('host probe uses the requested project even when the host process cwd diffe
   const result = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.ok(result.definitions['project-probe'].contentLength);
 });
+
+test('apply records host warnings seen while listing skills', async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-probe-warnings-'));
+  const out = path.join(scratch, 'probe.json');
+  const env = {
+    ARCHIFY_DSH_PROBE_OUT: out,
+    ARCHIFY_DSH_PROBE_CWD: '/workspace',
+    ARCHIFY_DSH_PROBE_SKILLS: '["archify"]',
+  };
+  const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+  Object.assign(process.env, env);
+  let exportFn = null;
+  let lists = 0;
+  const warn = (name) => ({ type: 'warn', args: [`skill "${name}" from project-dsh ignored because a higher-priority skill already exists`] });
+  const skills = {
+    async list() {
+      lists += 1;
+      exportFn(warn('personal-probe'));
+      return [{ name: 'archify', provider: 'archify-plugin' }];
+    },
+    async get(name) {
+      return { name, provider: 'archify-plugin', content: 'Current body' };
+    },
+    invalidateCache() {
+      // The post-invalidation list warns again; the probe must see it.
+    },
+  };
+  await apply({
+    logger: { exporter(options) { exportFn = options.export; } },
+    skills,
+  });
+  const result = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.equal(result.warningsCaptured, true);
+  assert.equal(result.warnings.length, lists);
+  assert.ok(result.warnings.every((warning) => warning.includes('ignored because a higher-priority skill already exists')));
+});
+
+test('apply records when the host has no logger exporter', async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-probe-no-logger-'));
+  const out = path.join(scratch, 'probe.json');
+  const env = {
+    ARCHIFY_DSH_PROBE_OUT: out,
+    ARCHIFY_DSH_PROBE_CWD: '/workspace',
+    ARCHIFY_DSH_PROBE_SKILLS: '["archify"]',
+  };
+  const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+  Object.assign(process.env, env);
+  await apply({ skills: {
+    async list() { return [{ name: 'archify', provider: 'archify-plugin' }]; },
+    async get(name) { return { name, provider: 'archify-plugin', content: 'Current body' }; },
+  } });
+  const result = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.equal(result.warningsCaptured, false);
+  assert.deepEqual(result.warnings, []);
+});
