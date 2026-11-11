@@ -70,7 +70,14 @@ test('bundle patch inserts one uniquely named filesystem Skill provider resolved
   assert.match(patch, /id:\s*archify-skill-filesystem/);
   assert.match(patch, /name:\s*'@deepseek-ai\/dsh-skill-filesystem'/);
   assert.match(patch, /providerName:\s*archify-plugin/);
-  assert.match(patch, /includeDefaultRoots:\s*true/);
+  // Default roots are conditional, not fixed: the provider covers them only
+  // when the profile's own skill-filesystem row is absent or disabled (#1336).
+  // A literal true re-introduces the double scan; a literal false re-breaks #906.
+  assert.match(patch, /includeDefaultRoots:\s*!!js "/);
+  assert.match(patch, /entry\.options\.id === 'skill-filesystem'/);
+  assert.match(patch, /entry\.options\.name === '@deepseek-ai\/dsh-skill-filesystem'/);
+  assert.match(patch, /return entry\.disabled/);
+  assert.doesNotMatch(patch, /includeDefaultRoots:\s*(true|false)\s*$/m);
   assert.match(patch, /bundledSkillDir:\s*!!js/);
   assert.doesNotMatch(patch, /customSkillDirs/);
   assert.match(

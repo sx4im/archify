@@ -1,10 +1,26 @@
 # Opt-in Archify filesystem Skill provider for DeepSeek Harness.
 # Resolves the packaged Skill root from the installed npm identity anchored at
 # the DSH profile (Loader baseUrl), never as a path concatenated onto baseUrl.
+#
+# Default roots are conditional, not fixed. The provider covers the host's
+# default personal and project Skill roots only when the profile's own
+# `skill-filesystem` row is absent or disabled. When that row is live it
+# already scans those roots, and a second provider over the same roots logs a
+# shadowing warning per Skill on every uncached catalog read and watches each
+# root twice (#1336). When no live row covers them, the provider keeps them
+# itself, so personal and project Skills stay loadable (#906).
+#
+# The check reads the Loader's own entry tree at activation, so it follows the
+# composed profile: a base row disabled by a later layer (the web bundle, the
+# isolated-probe overlay) makes this provider cover the roots. The Loader
+# resolves `!!js` config values when the entry activates; toggling the base
+# row in a running host takes effect on the next host start. Anything the
+# check cannot read falls back to covering the roots, which is the 1.1.0
+# behavior.
 - insert:
     - id: archify-skill-filesystem
       name: '@deepseek-ai/dsh-skill-filesystem'
       config:
         providerName: archify-plugin
-        includeDefaultRoots: true
+        includeDefaultRoots: !!js "(() => { try { const loader = ctx.get('loader'); if (!loader || typeof loader.entries !== 'function') return true; for (const entry of loader.entries()) { if (entry && entry.options && entry.options.id === 'skill-filesystem' && entry.options.name === '@deepseek-ai/dsh-skill-filesystem') return entry.disabled; } return true; } catch { return true; } })()"
         bundledSkillDir: !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@tt-a1i/archify-dsh/package.json')), 'skills')

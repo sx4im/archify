@@ -2,6 +2,10 @@
 
 For current publication status, see the [repository integration README](https://github.com/tt-a1i/archify/tree/main/integrations/deepseek-harness).
 
+## Unreleased
+
+- Makes `includeDefaultRoots` conditional on the profile's own `skill-filesystem` row: the Archify provider covers the host's default personal and project Skill roots only when that row is absent or disabled, so a live base row no longer produces a second scan of the same roots, a shadowing warning per Skill on every uncached catalog read, and duplicate watchers ([#1336](https://github.com/tt-a1i/archify/issues/1336)). The single-provider case is preserved: with the base row disabled, the provider still covers the roots itself ([#906](https://github.com/tt-a1i/archify/issues/906)). A preset's own `includeDefaultRoots: false` still does not stop the global provider from bringing the default roots into that preset's scope on `web`; that needs a host-side answer.
+
 ## 1.1.0 — 2026-11-08
 
 - Publishes the independent DSH sync requested in [#1153](https://github.com/tt-a1i/archify/issues/1153): Archify 3.2.0 pinned to `edf158c4e7a1d18d20cc329840f864289634c090`, including the post-tag Apache-2.0 and third-party notice fixes. Adapter MIT licensing remains distinct from the bundled Skill's licensing.

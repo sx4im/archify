@@ -77,6 +77,13 @@ test('default-root behavior is documented for both published releases', () => {
   assert.match(section, /Published \*\*1\.0\.0\*\* set `includeDefaultRoots: false`/);
   assert.match(section, /macOS Desktop `0\.2\.0-rc\.2`/);
   assert.match(section, /verification remains pending/);
+  assert.match(section, /Unreleased development makes the value conditional instead of fixed/);
+  assert.match(section, /only when the profile's own `skill-filesystem` row is absent or disabled/);
+  assert.match(section, /one shadowing warning per personal or project Skill on every uncached catalog read/);
+  assert.match(section, /takes effect on the next host start/);
+  assert.match(section, /needs a host-side answer/);
+  assert.match(section, /the default roots arrive from the base provider/);
+  assert.match(section, /the current development patch requires the conditional value/);
 });
 
 test('English, Chinese, and Japanese docs cover install, invoke, uninstall, community wording, and Produced Files', () => {

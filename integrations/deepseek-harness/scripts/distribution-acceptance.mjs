@@ -112,7 +112,12 @@ function parseDump(yaml) {
     const provider = line.match(/^\s+providerName:\s+(\S+)/);
     if (provider) current.config.providerName = provider[1];
     const includeDefault = line.match(/^\s+includeDefaultRoots:\s+(\S+)/);
-    if (includeDefault) current.config.includeDefaultRoots = includeDefault[1] === 'true';
+    if (includeDefault) {
+      // Keep the literal boolean for published baselines, and the raw `!!js`
+      // token for the conditional value so callers can tell them apart (#1336).
+      current.config.includeDefaultRoots = includeDefault[1] === 'true' ? true
+        : includeDefault[1] === 'false' ? false : includeDefault[1];
+    }
   }
   return { layers, rows };
 }
@@ -341,13 +346,13 @@ if (!archifyProvider || extraProviders.length !== 1 || archifyLayer.rows.length 
     layerRows: archifyLayer.rows.map((row) => row.id),
   });
 }
-if (archifyProvider.config.includeDefaultRoots !== true || archifyProvider.config.providerName !== 'archify-plugin') {
-  fail('compose', 'Archify provider does not preserve default Skill roots', { archifyProvider });
+if (archifyProvider.config.includeDefaultRoots !== '!!js' || archifyProvider.config.providerName !== 'archify-plugin') {
+  fail('compose', 'Archify provider does not use the conditional default-root policy', { archifyProvider });
 }
 pass('compose', {
   extraIds: archifyLayer.rows.map((row) => row.id),
   providerName: 'archify-plugin',
-  includeDefaultRoots: true,
+  includeDefaultRoots: 'conditional',
 });
 
 const probePatch = path.join(scratch, 'probe.patch.yml');
@@ -390,19 +395,23 @@ async function probeProfile(profile, stage, { isolated = false, expectedNames = 
   return { probe: JSON.parse(fs.readFileSync(probeOut, 'utf8')), stdout, stderr };
 }
 
-function verifyDefaultSkills(stage, probe, { isolated = false } = {}) {
+function verifyDefaultSkills(stage, probe, { isolated = false, defaultRootsProvider = null } = {}) {
+  // When the base provider is live, the conditional policy (#1336) must leave
+  // the default roots to it: fixtures arriving from archify-plugin would
+  // prove the Archify provider scanned the roots a second time.
+  const expectedProvider = defaultRootsProvider || (isolated ? 'archify-plugin' : null);
   for (const fixture of defaultSkills) {
     const hits = probe.skills.filter((skill) => skill.name === fixture.name);
     const definition = probe.definitions[fixture.name];
     if (hits.length !== 1 || !definition || definition.contentSha256 !== fixture.contentSha256
       || !definition.path || sameEntry(fixture.file, definition.path).status !== 'match'
-      || (isolated && (hits[0].provider !== 'archify-plugin' || definition.provider !== 'archify-plugin'))) {
+      || (expectedProvider && (hits[0].provider !== expectedProvider || definition.provider !== expectedProvider))) {
       fail(stage, 'personal/project Skill was not uniquely discovered and loaded from its original root', {
-        skill: fixture.name, hits, definition, isolated,
+        skill: fixture.name, hits, definition, isolated, expectedProvider,
       });
     }
   }
-  pass(stage, { skills: defaultSkills.map(({ name }) => name), baseProviderDisabled: isolated });
+  pass(stage, { skills: defaultSkills.map(({ name }) => name), baseProviderDisabled: isolated, defaultRootsProvider: expectedProvider });
 }
 
 async function verifyIsolatedRoots(profile, stage, includeDefaultRoots) {
@@ -424,7 +433,7 @@ async function verifyIsolatedRoots(profile, stage, includeDefaultRoots) {
 }
 
 const { probe: probeReceipt, stdout: probeStdout, stderr: probeStderr } = await probeProfile(PROFILE, 'skill-discovery');
-verifyDefaultSkills('default-skill-roots', probeReceipt);
+verifyDefaultSkills('default-skill-roots', probeReceipt, { defaultRootsProvider: 'filesystem' });
 await verifyIsolatedRoots(PROFILE, 'isolated-default-skill-roots', true);
 const archifyHits = (probeReceipt.skills || []).filter((skill) => skill.name === 'archify');
 if (archifyHits.length !== 1 || archifyHits[0].provider !== 'archify-plugin') {
@@ -616,7 +625,13 @@ for (const PREVIOUS_RELEASE of PREVIOUS_RELEASES) {
       fail(stage, 'upgrade did not discover and load exactly one installed Archify Skill', { probe });
     }
     pass(stage, { version, skillVersion, provider: 'archify-plugin', includeDefaultRoots, fileCount: expectedFiles.length });
-    if (includeDefaultRoots) verifyDefaultSkills(`${stage}-default-roots`, probe);
+    if (includeDefaultRoots) {
+      // After the upgrade the conditional policy leaves the default roots to
+      // the live base provider; a literal true would scan them twice (#1336).
+      verifyDefaultSkills(`${stage}-default-roots`, probe, {
+        defaultRootsProvider: includeDefaultRoots === '!!js' ? 'filesystem' : 'archify-plugin',
+      });
+    }
     await verifyIsolatedRoots(UPGRADE_PROFILE, `${stage}-isolated-roots`, includeDefaultRoots);
     return skill;
   }
@@ -630,7 +645,7 @@ for (const PREVIOUS_RELEASE of PREVIOUS_RELEASES) {
     timeout: PLUGIN_MUTATION_TIMEOUT,
   }));
   const upgradedSkill = await verifyUpgradeProfile(`plugin-upgrade-load-${PREVIOUS_RELEASE.version}`, PACKAGE_VERSION, release.skillVersion,
-    path.join(inspectRoot, 'package'), true);
+    path.join(inspectRoot, 'package'), '!!js');
   for (const args of [['doctor'], ['demo', path.join(workspace, 'upgraded-smoke')]]) {
     requireStatus(`upgraded-skill-smoke-${PREVIOUS_RELEASE.version}`, run(process.execPath, [path.join(upgradedSkill, 'bin', 'archify.mjs'), ...args], {
       cwd: workspace,
