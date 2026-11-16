@@ -135,6 +135,20 @@ test('a missing generated template is stale and can be regenerated', (t) => {
   assert.equal(f.run('--check').status, 0);
 });
 
+test('the generated Viewer declares color-scheme for the chosen theme', (t) => {
+  const f = fixture(t);
+  const generated = f.run();
+  assert.equal(generated.status, 0, generated.stderr);
+  const html = fs.readFileSync(f.output, 'utf8');
+  // The head meta declares both schemes so the first paint does not flash
+  // white on dark-preferring systems before the bootstrap script runs.
+  assert.ok(html.includes('<meta name="color-scheme" content="dark light">'), 'meta color-scheme is missing');
+  // Each theme block must carry its own scheme so native browser UI
+  // (scrollbars, form controls, popups) follows the chosen theme, not the OS.
+  assert.match(html, /:root,\s*\n\s*\[data-theme="dark"\]\s*\{[^}]*color-scheme:\s*dark;/);
+  assert.match(html, /\[data-theme="light"\]\s*\{[^}]*color-scheme:\s*light;/);
+});
+
 test('the story motion runtime is generated from the same authoritative Viewer source',t=>{
   const f=fixture(t),motion=path.join(f.root,'archify/story/native-motion.js');
   generateViewer({root:f.root});

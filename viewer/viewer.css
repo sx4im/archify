@@ -3,6 +3,7 @@
    ========================================================== */
 :root,
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg: #020617;
   --grid: #1e293b;
   --canvas-dot: rgba(148, 163, 184, 0.16);
@@ -48,6 +49,7 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --bg: #f4f5f7;
   --grid: #e9edf2;
   --canvas-dot: #e2e7ec;
