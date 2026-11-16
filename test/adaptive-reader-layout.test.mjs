@@ -61,6 +61,17 @@ test('declared-wide budget is additive and reports a cap without changing the le
   }), null, 'narrow diagrams remain on the legacy checker path');
 });
 
+// The theme toggle stores the choice as data-theme on <html>, but native
+// browser UI (scrollbars, form controls, <select>/<input> popups) follows
+// color-scheme, not data-theme. Both theme blocks must declare their scheme,
+// and the head must carry the meta so the first paint is not a white flash.
+test('viewer template declares color-scheme per theme and in the head meta', () => {
+  assert.equal((template.match(/<meta name="color-scheme" content="dark light">/g) || []).length, 1);
+  assert.ok(template.indexOf('<meta name="color-scheme"') < template.indexOf('</head>'), 'color-scheme meta must be in <head>');
+  assert.match(template, /\[data-theme="dark"\] \{\n\s*color-scheme: dark;/);
+  assert.match(template, /\[data-theme="light"\] \{\n\s*color-scheme: light;/);
+});
+
 // Browser ownership, geometry and settling live in reader-layout-browser and
 // reader-readability-maintained-browser; these checks keep the public declaration
 // and authoring documentation aligned without prescribing the scheduler's code.
