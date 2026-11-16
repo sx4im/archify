@@ -170,6 +170,37 @@ function fakeChromeChild() {
   return child;
 }
 
+// Answers DevTools pipe commands like a minimal Chrome and records them, so a
+// test can assert which commands a browser session actually sends.
+function respondingChromeChild() {
+  const child = fakeChromeChild();
+  const sent = [];
+  let buffer = '';
+  let attachCount = 0;
+  child.stdio[3].on('data', (chunk) => {
+    buffer += chunk;
+    let boundary;
+    while ((boundary = buffer.indexOf('\0')) >= 0) {
+      const raw = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 1);
+      if (!raw) continue;
+      const message = JSON.parse(raw);
+      sent.push(message);
+      let result = {};
+      if (message.method === 'Target.getTargets') {
+        result = { targetInfos: [{ type: 'page', targetId: 'target-1' }] };
+      } else if (message.method === 'Target.createTarget') {
+        result = { targetId: 'target-2' };
+      } else if (message.method === 'Target.attachToTarget') {
+        attachCount += 1;
+        result = { sessionId: `session-${attachCount}` };
+      }
+      child.stdio[4].write(`${JSON.stringify({ id: message.id, result })}\0`);
+    }
+  });
+  return { child, sent };
+}
+
 test('findChrome discovers chrome.exe from a Windows PATH after default locations', () => {
   const checked = [];
   const expected = String.raw`D:\Browser Bin\chrome.EXE`;
@@ -460,6 +491,29 @@ test('browser launch preserves unknown, combined and non-Windows compatibility l
       await attached;
     }
     assert.equal(fs.existsSync(browser.profileRoot), false);
+  }
+});
+
+test('browser-check denies downloads before any page can trigger one', async () => {
+  const { child, sent } = respondingChromeChild();
+  const browser = new ChromeVisualBrowser('/fake/chrome', {
+    env: {}, getuid: () => 1001, spawnImpl: () => child,
+  });
+  try {
+    const sessionId = await browser.sessionPromise;
+    assert.equal(sessionId, 'session-1');
+    const denied = sent.filter((message) => message.method === 'Browser.setDownloadBehavior');
+    assert.equal(denied.length, 1, 'downloads are denied exactly once per browser');
+    assert.deepEqual(denied[0].params, { behavior: 'deny' });
+    assert.equal(denied[0].sessionId, undefined, 'browser-level: no page session');
+    // A fresh target from resetPage inherits the browser-level denial.
+    await browser.resetPage();
+    assert.equal(
+      sent.filter((message) => message.method === 'Browser.setDownloadBehavior').length,
+      1, 'resetPage must not re-send the browser-level denial',
+    );
+  } finally {
+    await browser.close();
   }
 });
 

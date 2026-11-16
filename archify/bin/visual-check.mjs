@@ -1637,6 +1637,11 @@ export class ChromeVisualBrowser {
       targetId: target.targetId,
       flatten: true,
     });
+    // Deny downloads browser-wide before the page can trigger one: an
+    // inspected export would otherwise leave partial .crdownload files in
+    // the user's Downloads folder (#1371). Browser-level, so targets created
+    // later (see resetPage) inherit it without another call.
+    await this.cdp.send('Browser.setDownloadBehavior', { behavior: 'deny' });
     await this.cdp.send('Page.enable', {}, attached.sessionId);
     await this.cdp.send('Runtime.enable', {}, attached.sessionId);
     return attached.sessionId;
