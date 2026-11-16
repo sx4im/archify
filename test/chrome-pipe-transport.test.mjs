@@ -87,3 +87,36 @@ test('Chrome close releases inherited process pipes after the main process exits
   assert.equal(child.stdio[3].destroyed, true);
   assert.equal(child.stdio[4].destroyed, true);
 });
+
+test('Chrome visual browser denies downloads before the first inspection', async () => {
+  const child = chromeChild();
+  const sent = [];
+  // Answer each CDP command as it is written, so attach() can run to completion.
+  child.stdio[3].on('data', (chunk) => {
+    for (const raw of String(chunk).split('\0')) {
+      if (!raw) continue;
+      const message = JSON.parse(raw);
+      sent.push(message);
+      let result = {};
+      if (message.method === 'Target.getTargets') {
+        result = { targetInfos: [{ type: 'page', targetId: 'target-1' }] };
+      }
+      if (message.method === 'Target.attachToTarget') result = { sessionId: 'session-1' };
+      child.stdio[4].write(`${JSON.stringify({ id: message.id, result })}\0`);
+    }
+  });
+  const browser = browserFor(child);
+  try {
+    const sessionId = await browser.sessionPromise;
+    assert.equal(sessionId, 'session-1');
+    const denied = sent.find((message) => message.method === 'Browser.setDownloadBehavior');
+    assert.ok(denied, 'expected Browser.setDownloadBehavior to be sent during attach');
+    assert.deepEqual(denied.params, { behavior: 'deny' });
+    assert.equal(denied.sessionId, undefined);
+    // Downloads must be denied before any page work starts.
+    const enabled = sent.findIndex((message) => message.method === 'Page.enable');
+    assert.ok(sent.indexOf(denied) > enabled);
+  } finally {
+    await browser.close();
+  }
+});

@@ -1639,6 +1639,11 @@ export class ChromeVisualBrowser {
     });
     await this.cdp.send('Page.enable', {}, attached.sessionId);
     await this.cdp.send('Runtime.enable', {}, attached.sessionId);
+    // The inspected page can trigger an export download; without an explicit
+    // policy the file lands in the user's default download directory, and the
+    // killed Chrome leaves a partial .crdownload behind (#1371). Deny downloads
+    // browser-wide so targets created later (see resetPage) inherit the policy.
+    await this.cdp.send('Browser.setDownloadBehavior', { behavior: 'deny' });
     return attached.sessionId;
   }
 
